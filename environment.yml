@@ -1,0 +1,11 @@
+name: sampath-bank-env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - nodejs=24.4.1
+  - pip
+  - pip:
+    # Add any Python packages here if needed in the future
+prefix: /Users/anaconda3/envs/sampath-bank-env
