@@ -7,6 +7,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies & build output
+node_modules/
+dist/
+dist-ssr/
+
+# Environment files
+.env
+.env.*
+!.env.local
+.streamlit/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -19,7 +30,7 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# Conda
+# Conda / Python
 .conda/
 *.conda
 __pycache__/

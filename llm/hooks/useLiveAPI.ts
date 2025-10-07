@@ -121,43 +121,68 @@ export function useLiveApi({
     client.on('interrupted', stopAudioStreamer);
     client.on('audio', onAudio);
 
-    const onToolCall = (toolCall: LiveServerToolCall) => {
-      const functionResponses: any[] = [];
-
-      for (const fc of toolCall.functionCalls) {
-        // Log the function call trigger
-        const triggerMessage = `Triggering function call: **${
-          fc.name
-        }**\n\`\`\`json\n${JSON.stringify(fc.args, null, 2)}\n\`\`\``;
-        useLogStore.getState().addTurn({
-          role: 'system',
-          text: triggerMessage,
-          isFinal: true,
+    const onToolCall = async (toolCall: LiveServerToolCall) => {
+      if (!dispatcherInitialized) {
+        console.warn('Tool call received before dispatcher ready.');
+        client.sendToolResponse({
+          functionResponses: toolCall.functionCalls.map(fc => ({
+            id: fc.id,
+            name: fc.name,
+            response: {
+              result: null,
+              error: 'Tooling not ready',
+            },
+          })),
         });
-
-        // Prepare the response
-        functionResponses.push({
-          id: fc.id,
-          name: fc.name,
-          response: { result: 'ok' }, // simple, hard-coded function response
-        });
+        return;
       }
 
-      // Log the function call response
-      if (functionResponses.length > 0) {
-        const responseMessage = `Function call response:\n\`\`\`json\n${JSON.stringify(
-          functionResponses,
-          null,
-          2,
-        )}\n\`\`\``;
-        useLogStore.getState().addTurn({
-          role: 'system',
-          text: responseMessage,
-          isFinal: true,
-        });
-      }
+      const functionResponses = await Promise.all(
+        toolCall.functionCalls.map(async fc => {
+          const triggerMessage = `Triggering function call: **${fc.name}**\n\`\`\`json\n${JSON.stringify(fc.args, null, 2)}\n\`\`\``;
+          useLogStore.getState().addTurn({
+            role: 'system',
+            text: triggerMessage,
+            isFinal: true,
+          });
 
-      client.sendToolResponse({ functionResponses: functionResponses });
+          try {
+            const [response] = await functionDispatcher.dispatchFunctions([{
+              id: fc.id,
+              name: fc.name,
+              args: fc.args,
+            }]);
+
+            const responseMessage = `Function call response:\n\`\`\`json\n${JSON.stringify(response, null, 2)}\n\`\`\``;
+            useLogStore.getState().addTurn({
+              role: 'system',
+              text: responseMessage,
+              isFinal: true,
+            });
+
+            return response;
+          } catch (error: any) {
+            const errorMessage = `Function execution failed for **${fc.name}**: ${error?.message || error}`;
+            console.error(errorMessage);
+            useLogStore.getState().addTurn({
+              role: 'system',
+              text: errorMessage,
+              isFinal: true,
+            });
+
+            return {
+              id: fc.id,
+              name: fc.name,
+              response: {
+                result: null,
+                error: error instanceof Error ? error.message : 'Unknown error',
+              },
+            };
+          }
+        }),
+      );
+
+      client.sendToolResponse({ functionResponses });
     };
 
     client.on('toolcall', onToolCall);
